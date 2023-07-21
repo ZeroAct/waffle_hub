@@ -158,7 +158,7 @@ def export_transformers(self, export_dir: Union[str, Path]) -> str:
     """
     export_dir = Path(export_dir)
 
-    train_ids, val_ids, test_ids, _ = self.get_split_ids()
+    train_ids, val_ids, test_ids, _ = self.get_all_split_image_ids()
 
     if self.task == TaskType.CLASSIFICATION:
         _export_transformers_classification(self, export_dir, train_ids, val_ids, test_ids, [])

@@ -167,26 +167,26 @@ def _split(dataset_name, root_dir):
     dataset = Dataset.load(dataset_name, root_dir=root_dir)
 
     dataset.split(0.8)
-    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_split_ids()
+    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_all_split_image_ids()
     assert len(train_ids) + len(val_ids) == len(dataset.get_images())
     assert len(test_ids) == 0
 
     dataset.split(0.445446, 0.554554)
-    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_split_ids()
+    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_all_split_image_ids()
     assert len(train_ids) + len(val_ids) == len(dataset.get_images())
     assert len(test_ids) == 0
 
     dataset.split(0.4, 0.4, 0.2)
-    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_split_ids()
+    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_all_split_image_ids()
     assert len(train_ids) + len(val_ids) + len(test_ids) == len(dataset.get_images())
 
     dataset.split(0.99999999999999, 0.0)
-    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_split_ids()
+    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_all_split_image_ids()
     assert len(dataset.get_categories()) == len(val_ids)
     assert len(test_ids) == 0
 
     dataset.split(0.00000000000001, 0.0)
-    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_split_ids()
+    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_all_split_image_ids()
     assert len(dataset.get_categories()) == len(train_ids)
     assert len(test_ids) == 0
 
@@ -298,7 +298,7 @@ def _from_coco(dataset_name, task: TaskType, coco_path, root_dir):
         coco_root_dir=coco_path / "images",
         root_dir=root_dir,
     )
-    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_split_ids()
+    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_all_split_image_ids()
     assert len(train_ids) == 60
     assert len(val_ids) == 20
     assert len(val_ids) == len(test_ids)
@@ -311,7 +311,7 @@ def _from_coco(dataset_name, task: TaskType, coco_path, root_dir):
         coco_root_dir=coco_path / "images",
         root_dir=root_dir,
     )
-    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_split_ids()
+    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_all_split_image_ids()
     assert len(train_ids) == 60
     assert len(val_ids) == 20
     assert len(test_ids) == 20
@@ -344,7 +344,7 @@ def test_yolo_classification(yolo_classification_path: Path, tmpdir: Path):
         yolo_root_dir=yolo_classification_path,
         root_dir=root_dir,
     )
-    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_split_ids()
+    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_all_split_image_ids()
     assert len(train_ids) == 60
     assert len(val_ids) == 20
     assert len(test_ids) == 20
@@ -367,7 +367,7 @@ def test_yolo_object_detection(yolo_object_detection_path: Path, tmpdir: Path):
         yaml_path=yolo_object_detection_path / "data.yaml",
         root_dir=root_dir,
     )
-    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_split_ids()
+    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_all_split_image_ids()
     assert len(train_ids) == 60
     assert len(val_ids) == 20
     assert len(test_ids) == 20
@@ -390,7 +390,7 @@ def test_yolo_instance_segmentation(yolo_instance_segmentation_path: Path, tmpdi
         yaml_path=yolo_instance_segmentation_path / "data.yaml",
         root_dir=root_dir,
     )
-    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_split_ids()
+    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_all_split_image_ids()
     assert len(train_ids) == 60
     assert len(val_ids) == 20
     assert len(test_ids) == 20
@@ -439,7 +439,7 @@ def _from_transformers(dataset_name, task: TaskType, transformers_path, root_dir
     )
     assert dataset.dataset_info_file.exists()
 
-    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_split_ids()
+    train_ids, val_ids, test_ids, unlabeled_ids = dataset.get_all_split_image_ids()
     assert len(train_ids) == 80
     assert len(dataset.get_images()) == 100
 

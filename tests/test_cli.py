@@ -130,8 +130,8 @@ def test_dataset_delete(test_dir: Path):
     assert not (test_dir / "datasets" / "clone").exists()
 
 
-def test_dataset_get_split_ids(test_dir: Path):
-    cmd = f"python -m waffle_hub.dataset.cli get_split_ids \
+def test_dataset_get_all_split_image_ids(test_dir: Path):
+    cmd = f"python -m waffle_hub.dataset.cli get_all_split_image_ids \
         --name from_coco \
         --root-dir {test_dir / 'datasets'} \
     "

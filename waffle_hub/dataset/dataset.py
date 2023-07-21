@@ -304,18 +304,26 @@ class Dataset:
     def get_category_names(self) -> list[str]:
         return [category.name for category in self.categories]
 
-    def get_image_to_annotations(self) -> dict[int, list[Annotation]]:
+    def get_image_to_annotations(
+        self, image_ids: Union[int, list[int]] = None
+    ) -> dict[int, list[Annotation]]:
         image_to_annotations = defaultdict(list)
-        for annotation in self.get_annotations():
+        for annotation in self.get_annotations(image_ids=image_ids):
             image_to_annotations[annotation.image_id].append(annotation)
         return dict(image_to_annotations)
 
-    def get_category_to_annotations(self) -> dict[int, list[Annotation]]:
+    def get_category_to_annotations(
+        self, category_ids: Union[int, list[int]] = None
+    ) -> dict[int, list[Annotation]]:
         category_to_annotations = defaultdict(list)
-        category_name_to_id = {
-            category.name: category.category_id for category in self.get_categories()
-        }
-        for annotation in self.get_annotations():
+
+        if self.task == TaskType.TEXT_RECOGNITION:
+            category_name_to_id = {
+                category.name: category.category_id
+                for category in self.get_categories(category_ids=category_ids)
+            }
+
+        for annotation in self.get_annotations(category_ids=category_ids):
             if self.task == TaskType.TEXT_RECOGNITION:
                 texts = annotation.caption
                 characters = set(texts)
@@ -325,12 +333,17 @@ class Dataset:
                 category_to_annotations[annotation.category_id].append(annotation)
         return dict(category_to_annotations)
 
-    def get_category_to_images(self) -> dict[int, list[Image]]:
-        category_to_images = category_to_images = {c.category_id: [] for c in self.get_categories()}
-        category_name_to_id = {
-            category.name: category.category_id for category in self.get_categories()
-        }
-        for image_id, annotations in self.get_image_to_annotations().items():
+    def get_category_to_images(
+        self, category_ids: Union[int, list[int]] = None
+    ) -> dict[int, list[Image]]:
+        category_to_images = defaultdict(list)
+
+        if self.task == TaskType.TEXT_RECOGNITION:
+            category_name_to_id = {
+                category.name: category.category_id for category in self.get_categories()
+            }
+
+        for image in self.get_images():
             image = self.get_images([image_id])[0]
             if self.task == TaskType.TEXT_RECOGNITION:
                 texts = map(lambda a: a.caption, annotations)
@@ -355,6 +368,72 @@ class Dataset:
             for category_id, annotations in self.get_category_to_annotations().items()
         }
         return num_annotations_per_category
+
+    def get_image_stats(
+        self, image_ids: Union[int, list[int]] = None, set_name: str = None, labeled: bool = True
+    ) -> dict[str, int]:
+        images = self.get_images(image_ids=image_ids, set_name=set_name, labeled=labeled)
+
+        image_stats = {
+            "num_images": len(images),
+        }
+
+        # general stats
+        widths = []
+        heights = []
+        for image in images:
+            widths.append(image.width)
+            heights.append(image.height)
+        image_stats["mean_width"] = sum(widths) / len(widths)
+        image_stats["mean_height"] = sum(heights) / len(heights)
+        image_stats["min_width"] = min(widths)
+        image_stats["min_height"] = min(heights)
+        image_stats["max_width"] = max(widths)
+        image_stats["max_height"] = max(heights)
+
+        # task specific stats
+        if self.task == TaskType.CLASSIFICATION:
+            pass
+        elif self.task == TaskType.OBJECT_DETECTION:
+            pass
+        elif self.task == TaskType.INSTANCE_SEGMENTATION:
+            pass
+        elif self.task == TaskType.TEXT_RECOGNITION:
+            pass
+
+        return image_stats
+
+    def get_annotation_stats(
+        self,
+        image_ids: list[int] = None,
+        annotations_ids: list[int] = None,
+        category_ids: list[int] = None,
+        set_name: str = None,
+    ) -> dict[str, int]:
+        annotations = self.get_annotations(
+            image_ids=image_ids,
+            annotations_ids=annotations_ids,
+            category_ids=category_ids,
+            set_name=set_name,
+        )
+
+        annotation_stats = {
+            "num_annotations": len(annotations),
+        }
+
+        # general stats
+
+        # task specific stats
+        if self.task == TaskType.CLASSIFICATION:
+            annotation_stats[
+                "num_annotations_per_category"
+            ] = self.get_num_annotations_per_category()
+
+        return annotation_stats
+
+    def get_category_stats(self) -> dict[int, dict[str, int]]:
+        category_stats = {}
+        return category_stats
 
     # factories
     @classmethod
@@ -1097,73 +1176,262 @@ class Dataset:
         return dataset_info
 
     # get
-    def get_images(self, image_ids: list[int] = None, labeled: bool = True) -> list[Image]:
+    def get_image_ids(self):
+        """Get image ids.
+
+        Returns:
+            list[int]: image id list
+        """
+        return sorted(
+            [int(f.stem) for f in self.image_dir.glob("*.json")],
+            key=lambda x: x,
+        )
+
+    def get_category_ids(self):
+        """Get category ids.
+
+        Returns:
+            list[int]: category id list
+        """
+        return sorted(
+            [int(f.stem) for f in self.category_dir.glob("*.json")],
+            key=lambda x: x,
+        )
+
+    def get_annotation_ids(self):
+        """Get annotation ids.
+
+        Returns:
+            list[int]: annotation id list
+        """
+        return sorted(
+            [int(f.stem) for f in self.annotation_dir.glob("*/*.json")],
+            key=lambda x: x,
+        )
+
+    def get_images(
+        self,
+        image_ids: Union[int, list[int]] = None,
+        annotation_ids: Union[int, list[int]] = None,
+        category_ids: Union[int, list[int]] = None,
+        set_name: str = None,
+    ) -> list[Image]:
         """Get "Image"s.
 
         Args:
-            image_ids (list[int], optional): id list. None for all "Image"s. Defaults to None.
-            labeled (bool, optional): get labeled images. False for unlabeled images. Defaults to True.
+            image_ids (Union[int, list[int]], optional): id list. None for all "Image"s. Defaults to None.
+            annotation_ids (Union[int, list[int]], optional): id list. Defaults to None.
+            category_ids (Union[int, list[int]], optional): id list. Defaults to None.
+            set_name (str, optional): set_name name. None for all splits. Defaults to None.
 
         Returns:
             list[Image]: "Image" list
         """
-        image_files = (
-            list(map(lambda x: self.image_dir / (str(x) + ".json"), image_ids))
-            if image_ids
-            else list(self.image_dir.glob("*.json"))
-        )
-        labeled_images = []
-        unlabeled_images = []
-        for image_file in image_files:
-            if self.get_annotations(image_file.stem):
-                labeled_images.append(Image.from_json(image_file))
-            else:
-                unlabeled_images.append(Image.from_json(image_file))
+        if sum(map(lambda x: x is not None, [image_ids, category_ids, set_name])) > 1:
+            raise ValueError(
+                "Only one of image_ids, annotation_ids, category_ids, set_name should be given."
+            )
 
-        if labeled:
-            logger.info(f"Found {len(labeled_images)} labeled images")
-            return labeled_images
+        if image_ids:
+            if isinstance(image_ids, int):
+                image_ids = [image_ids]
+            image_ids = set(image_ids)
+            image_ids_ = list(image_ids & set(self.get_image_ids()))
+            if len(image_ids) != len(image_ids_):
+                logger.warning(
+                    f"image_ids {image_ids - set(image_ids_)} are not in dataset. They will be ignored."
+                )
+            image_ids = image_ids_
+
+            images = []
+            for image_id in image_ids:
+                images.append(Image.from_json(self.image_dir / f"{image_id}.json"))
+
+        elif annotation_ids:
+            if isinstance(annotation_ids, int):
+                annotation_ids = [annotation_ids]
+            annotation_ids = set(annotation_ids)
+            annotation_ids_ = list(annotation_ids & set(self.get_annotation_ids()))
+            if len(annotation_ids) != len(annotation_ids_):
+                logger.warning(
+                    f"annotation_ids {annotation_ids - set(annotation_ids_)} are not in dataset. They will be ignored."
+                )
+            annotation_ids = annotation_ids_
+
+            image_ids = set()
+            annotations = {
+                annotation_id: Annotation.from_json(self.annotation_dir / f"{annotation_id}.json")
+                for annotation_id in annotation_ids
+            }
+            for annotation_id, annotation in annotations.items():
+                image_ids.add(annotation.image_id)
+            image_ids = list(image_ids)
+
+            images = []
+            for image_id in image_ids:
+                images.append(Image.from_json(self.image_dir / f"{image_id}.json"))
+
+        elif category_ids:
+            if isinstance(category_ids, int):
+                category_ids = [category_ids]
+            category_ids = set(category_ids)
+            category_ids_ = list(category_ids & set(self.get_category_ids()))
+            if len(category_ids) != len(category_ids_):
+                logging.warning(
+                    f"category_ids {category_ids - set(category_ids_)} are not in dataset. They will be ignored."
+                )
+            category_ids = category_ids_
+
+            image_ids = set()
+            annotations = {
+                annotation_id: Annotation.from_json(self.annotation_dir / f"{annotation_id}.json")
+                for annotation_id in self.get_annotation_ids()
+            }
+            for annotation_id, annotation in annotations.items():
+                if annotation.category_id in category_ids:
+                    image_ids.add(annotation.image_id)
+            image_ids = list(image_ids)
+
+            images = []
+            for image_id in image_ids:
+                images.append(Image.from_json(self.image_dir / f"{image_id}.json"))
+
+        elif set_name:
+            image_ids = self.get_split_image_ids(set_name)
+
+            images = []
+            for image_id in image_ids:
+                images.append(Image.from_json(self.image_dir / f"{image_id}.json"))
+
         else:
-            logger.info(f"Found {len(unlabeled_images)} unlabeled images")
-            return unlabeled_images
+            image_ids = self.get_image_ids()
 
-    def get_categories(self, category_ids: list[int] = None) -> list[Category]:
+            images = []
+            for image_id in image_ids:
+                images.append(Image.from_json(self.image_dir / f"{image_id}.json"))
+
+        return images
+
+    def get_categories(
+        self,
+        image_ids: Union[int, list[int]] = None,
+        annotation_ids: Union[int, list[int]] = None,
+        category_ids: Union[int, list[int]] = None,
+    ) -> list[Category]:
         """Get "Category"s.
 
         Args:
-            category_ids (list[int], optional): id list. None for all "Category"s. Defaults to None.
+            image_ids (Union[int, list[int]], optional): id list. Defaults to None.
+            annotation_ids (Union[int, list[int]], optional): id list. Defaults to None.
+            category_ids (Union[int, list[int]], optional): id list. None for all "Category"s. Defaults to None.
 
         Returns:
             list[Category]: "Category" list
         """
-        return sorted(
-            [
-                Category.from_json(f, self.task)
-                for f in (
-                    [self.category_dir / f"{category_id}.json" for category_id in category_ids]
-                    if category_ids
-                    else self.category_dir.glob("*.json")
-                )
-            ],
-            key=lambda x: x.category_id,
-        )
+        if sum(map(lambda x: x is not None, [image_ids, annotation_ids, category_ids])) > 1:
+            raise ValueError("Only one of image_ids, annotation_ids, category_ids should be given.")
 
-    def get_annotations(self, image_id: int = None) -> list[Annotation]:
+        if category_ids is None:
+            self.get_category_ids()
+        elif isinstance(category_ids, int):
+            category_ids = [category_ids]
+        elif isinstance(category_ids, list):
+            category_ids = category_ids
+        else:
+            raise ValueError("category_ids should be int or list[int] or None")
+
+        categories = []
+        for category_id in sorted(category_ids):
+            categories.append(Category.from_json(self.category_dir / f"{category_id}.json"))
+        return categories
+
+    def get_annotations(
+        self,
+        image_ids: Union[int, list[int]] = None,
+        annotation_ids: Union[int, list[int]] = None,
+        category_ids: Union[int, list[int]] = None,
+        set_name: str = None,
+    ) -> list[Annotation]:
         """Get "Annotation"s.
 
         Args:
-            image_id (int, optional): image id. None for all "Annotation"s. Defaults to None.
+            image_ids (Union[int, list[int]], optional): image id list. None for all "Annotation"s. Defaults to None.
+            annotation_ids (Union[int, list[int]], optional): annotation id list. None for all "Annotation"s. Defaults to None.
+            category_ids (Union[int, list[int]], optional): category id list. None for all "Annotation"s. Defaults to None.
+            set_name (str, optional): set_name name. None for all splits. Defaults to None.
 
         Returns:
             list[Annotation]: "Annotation" list
         """
-        if image_id:
-            return [
-                Annotation.from_json(f, self.task)
-                for f in self.annotation_dir.glob(f"{image_id}/*.json")
-            ]
+
+        if (
+            sum(map(lambda x: x is not None, [image_ids, annotation_ids, category_ids, set_name]))
+            > 1
+        ):
+            raise ValueError("Only one of image_ids, annotation_ids, category_ids should be given.")
+
+        if annotation_ids is not None:
+            if isinstance(annotation_ids, int):
+                annotation_ids = [annotation_ids]
+            elif isinstance(annotation_ids, list):
+                annotation_ids = annotation_ids
+            else:
+                raise ValueError("annotation_ids should be int or list[int] or None")
+
+            annotations = []
+            for annotation_id in sorted(annotation_ids):
+                annotations.append(
+                    Annotation.from_json(self.annotation_dir / f"{annotation_id}.json")
+                )
+
+        elif category_ids is not None:
+            if isinstance(category_ids, int):
+                category_ids = [category_ids]
+            elif isinstance(category_ids, list):
+                category_ids = category_ids
+            else:
+                raise ValueError("category_ids should be int or list[int] or None")
+
+            annotations = []
+            annotation_ids = self.get_annotation_ids()
+            for annotation_id in sorted(annotation_ids):
+                annotation = Annotation.from_json(self.annotation_dir / f"{annotation_id}.json")
+                if annotation.category_id in category_ids:
+                    annotations.append(annotation)
+
+        elif image_ids is not None:
+            if isinstance(image_ids, int):
+                image_ids = [image_ids]
+            elif isinstance(image_ids, list):
+                image_ids = image_ids
+            else:
+                raise ValueError("image_ids should be int or list[int] or None")
+
+            annotations = []
+            annotation_ids = self.get_annotation_ids()
+            for annotation_id in sorted(annotation_ids):
+                annotation = Annotation.from_json(self.annotation_dir / f"{annotation_id}.json")
+                if annotation.image_id in image_ids:
+                    annotations.append(annotation)
+
+        elif set_name is not None:
+            image_ids = self.get_split_image_ids(set_name)
+            annotations = []
+            annotation_ids = self.get_annotation_ids()
+            for annotation_id in sorted(annotation_ids):
+                annotation = Annotation.from_json(self.annotation_dir / f"{annotation_id}.json")
+                if annotation.image_id in image_ids:
+                    annotations.append(annotation)
+
         else:
-            return [Annotation.from_json(f, self.task) for f in self.annotation_dir.glob("*/*.json")]
+            annotations = []
+            annotation_ids = self.get_annotation_ids()
+            for annotation_id in sorted(annotation_ids):
+                annotations.append(
+                    Annotation.from_json(self.annotation_dir / f"{annotation_id}.json")
+                )
+
+        return annotations
 
     def get_predictions(self, image_id: int = None) -> list[Annotation]:
         """Get "Prediction"s.
@@ -1266,7 +1534,7 @@ class Dataset:
         Examples:
             >>> dataset = Dataset.load("some_dataset")
             >>> dataset.split(train_ratio=0.8, val_ratio=0.1, test_ratio=0.1)
-            >>> dataset.get_split_ids()
+            >>> dataset.get_all_split_image_ids()
             [[1, 2, 3, 4, 5, 6, 7, 8], [9], [10], []]  # train, val, test, unlabeled image ids
         """
 
@@ -1342,12 +1610,12 @@ class Dataset:
         )
 
     # export
-    def get_split_ids(self) -> list[list[int]]:
+    def get_all_split_image_ids(self) -> list[list[int]]:
         """
         Get split ids
 
         Returns:
-            list[list[int]]: split ids
+            list[list[int]]: [train image ids, val image ids, test image ids, unlabeled image ids]
         """
         if not self.train_set_file.exists():
             raise FileNotFoundError("There is no set files. Please run ds.split() first")
@@ -1362,6 +1630,34 @@ class Dataset:
         )
 
         return [train_ids, val_ids, test_ids, unlabeled_ids]
+
+    def get_split_image_ids(self, set_name: str = None) -> list[int]:
+        """
+        Get split ids
+
+        Args:
+            set_name (str, optional): set_name name. Defaults to None.
+
+        Returns:
+            list[int]: split ids
+        """
+        if not self.train_set_file.exists():
+            raise FileNotFoundError("There is no set files. Please run ds.split() first")
+
+        if set_name == "train":
+            split_file = self.train_set_file
+        elif set_name == "val":
+            split_file = self.val_set_file
+        elif set_name == "test":
+            split_file = self.test_set_file
+        elif set_name == "unlabeled":
+            split_file = self.unlabeled_set_file
+        else:
+            raise ValueError(
+                f"Unknown set_name: {set_name}. set_name should be one of ['train', 'val', 'test', 'unlabeled']"
+            )
+
+        return io.load_json(split_file) if split_file.exists() else []
 
     def export(self, data_type: Union[str, DataType]) -> str:
         """
